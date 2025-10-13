@@ -1,0 +1,57 @@
+gitigore alraedy has this then y -- # ===========================
+# PYTHON CACHE & TEMP FILES
+# ===========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual environments
+venv/
+.env/
+.venv/
+ENV/
+env/
+
+# ===========================
+# DATA & LARGE RESULTS
+# ===========================
+# Raw dataset frames or subsets (never upload full data)
+celebdf_frames/
+datasets/
+uploads/
+
+# Intermediate results or archived metrics
+multi_results/
+results/*
+
+# ===========================
+# MODEL CHECKPOINTS / WEIGHTS
+# ===========================
+checkpoints/
+*.pth
+*.pt
+*.ckpt
+*.tar.gz
+*.zip
+
+# ===========================
+# SYSTEM / OS FILES
+# ===========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===========================
+# IDE / TOOL FILES
+# ===========================
+.vscode/
+.idea/
+.streamlit/
+
+# ===========================
+# PAPER / PRIVATE FILES
+# ===========================
+kaggle.json
+Published_paper.pdf
