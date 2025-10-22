@@ -41,7 +41,7 @@ It detects whether a given video is **REAL or FAKE** and highlights manipulated 
 
 ```bash
 # Clone repository
-git clone https://github.com/<your-username>/deepfake-detection-videos.git
+git clone https://github.com/Vismitha-K/deepfake-detection-videos.git
 cd deepfake-detection-videos
 
 # Create and activate virtual environment
@@ -64,3 +64,4 @@ Upload a `.mp4` video and view **REAL/FAKE prediction** with **Grad-CAM overlays
 * Celeb-DF (v2) dataset
 * Arman176001/deepfake-detection (baseline reference)
 * TorchVision & Streamlit libraries
+
