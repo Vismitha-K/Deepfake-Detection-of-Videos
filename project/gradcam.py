@@ -48,7 +48,30 @@ class GradCAM:
         input_tensor: (1,C,H,W)
         """
         # forward + choose target
-        output = self.forward(input_tensor)  # may be logits
+        output = self.forward(input_tensor)
+
+        # Handle dict outputs from hybrid (MoE) models
+        if isinstance(output, dict):
+            if 'logits' in output:
+                output = output['logits']
+            elif 'prob' in output:
+                output = torch.log(output['prob'] + 1e-8)
+            else:
+                raise TypeError("GradCAM expected tensor output, got dict without 'logits' or 'prob'.")
+
+        # pick target class
+        if target_class is None:
+            if output.dim() == 1 or output.size(1) == 1:
+                target_class = 0
+            else:
+                target_class = int(output.softmax(dim=1)[0].argmax().cpu().numpy())
+
+        one_hot = torch.zeros_like(output)
+        if output.dim() == 1:
+            one_hot[0] = 1.0
+        else:
+            one_hot[0, target_class] = 1.0
+
         if target_class is None:
             # predicted class
             if output.dim() == 1 or output.size(1) == 1:

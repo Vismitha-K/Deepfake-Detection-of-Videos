@@ -18,14 +18,19 @@ sys.path.insert(0, HERE)
 # ==========================================================
 # Model Factory
 # ==========================================================
-def get_model(name, num_classes=2):
+def get_model(name, num_classes=2, device='cpu'):
     name = name.lower()
+    from torchvision import models
+    import torch
+
     if name == "resnet50":
         m = models.resnet50(weights=None)
         m.fc = torch.nn.Linear(m.fc.in_features, num_classes)
+
     elif name == "densenet121":
         m = models.densenet121(weights=None)
         m.classifier = torch.nn.Linear(m.classifier.in_features, num_classes)
+
     elif name == "mobilenet_v3_large":
         m = models.mobilenet_v3_large(weights=None)
 
@@ -40,13 +45,25 @@ def get_model(name, num_classes=2):
             torch.nn.Dropout(0.2),
             torch.nn.Linear(960, num_classes)
         )
+
     elif name == "efficientnet_b0":
         m = models.efficientnet_b0(weights=None)
         m.classifier[1] = torch.nn.Linear(m.classifier[1].in_features, num_classes)
+
+    elif name == "moe":
+        # Import your hybrid model
+        from moe_model import MoEModel
+        m = MoEModel(
+            resnet_ckpt=None,
+            mobilenet_ckpt=None,
+            device=device
+        )
+        print("[Info] Using hybrid Mixture-of-Experts (MoE) model.")
+
     else:
         raise ValueError(f"Unsupported model: {name}")
-    return m
 
+    return m
 
 # ==========================================================
 # Frame utilities
@@ -101,7 +118,7 @@ def main(args):
     # Load model and checkpoint
     # -----------------------------
     print(f"Loading model: {args.model}")
-    model = get_model(args.model)
+    model = get_model(args.model, device=device)
     if not os.path.exists(args.ckpt):
         raise FileNotFoundError(f"Checkpoint not found: {args.ckpt}")
     state_dict = torch.load(args.ckpt, map_location=device)
@@ -122,10 +139,14 @@ def main(args):
     for i, (frame_index, frame_bgr) in enumerate(frames):
         inp = preprocess_frame(frame_bgr, size=args.input_size).to(device)
         with torch.no_grad():
-            logits = model(inp)
+            out = model(inp)
+            logits = out['logits'] if isinstance(out, dict) else out
             probs = F.softmax(logits, dim=1).cpu().numpy()[0]
+
         prob_fake = float(probs[1])
-        cam = gradcam.generate_cam(inp, target_class=1)
+        # For Grad-CAM, target class = predicted or fixed as FAKE (1)
+        target_class = int(np.argmax(probs))
+        cam = gradcam.generate_cam(inp, target_class=target_class)
         cam_energy = float(cam.mean())
         overlay = overlay_cam_on_image(frame_bgr, cam, alpha=args.alpha_overlay)
         out_name = f"{i:03d}_frame{frame_index}_p{prob_fake:.3f}_ce{cam_energy:.4f}.jpg"
