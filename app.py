@@ -1,76 +1,53 @@
+# app.py — Streamlit Web App for Hybrid MoE Deepfake Detection
+
 import streamlit as st
 import os
 import torch
 import torch.nn.functional as F
-from torchvision import models, transforms
 from PIL import Image
 import numpy as np
 import cv2
 import time
+from torchvision import transforms
 from project.gradcam import GradCAM, overlay_cam_on_image
+from project.moe_model import MoEModel  # ✅ import your hybrid model
 
 # -------------------------------
 # Streamlit Page Setup
 # -------------------------------
-st.set_page_config(page_title="Deepfake Detection with Grad-CAM", layout="wide")
-st.title("🎭 Deepfake Detection with Explainability")
+st.set_page_config(page_title="Hybrid Deepfake Detection", layout="wide")
+st.title("🎭 Hybrid Deepfake Detection with Explainability")
 st.write(
-    "Upload a video and select a model to analyze whether it is **REAL or FAKE**, "
-    "with **Grad-CAM** heatmaps highlighting regions influencing the prediction."
+    "Upload a video and let the **Hybrid Mixture-of-Experts (MoE)** model detect whether it is **REAL** or **FAKE**. "
+    "The app also generates **Grad-CAM heatmaps** showing which regions influenced the decision."
 )
 
 # -------------------------------
-# Model Loading Function
+# Cached Model Loader
 # -------------------------------
 @st.cache_resource
-def load_model(model_name):
+def load_hybrid_model():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_name = model_name.lower()
 
-    if model_name == "resnet50":
-        model = models.resnet50(weights=None)
-        model.fc = torch.nn.Linear(model.fc.in_features, 2)
-        ckpt = os.path.join("checkpoints", "resnet50", "resnet50_best.pth")
+    # Load Hybrid MoE model
+    model = MoEModel(
+        resnet_ckpt=None,
+        mobilenet_ckpt=None,
+        device=device
+    )
 
-    elif model_name == "densenet121":
-        model = models.densenet121(weights=None)
-        model.classifier = torch.nn.Linear(model.classifier.in_features, 2)
-        ckpt = os.path.join("checkpoints", "densenet121", "densenet121_best.pth")
-
-    elif model_name == "mobilenet_v3_large":
-        model = models.mobilenet_v3_large(weights=None)
-        # Fix: match your training classifier structure
-        in_features = 960  # the feature size used in your training
-        model.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(0.2),
-            torch.nn.Linear(in_features, 2)
-        )
-        ckpt = os.path.join("checkpoints", "mobilenet_v3_large", "mobilenet_v3_large_best.pth")
-
-    elif model_name == "efficientnet_b0":
-        model = models.efficientnet_b0(weights=None)
-        model.classifier[1] = torch.nn.Linear(model.classifier[1].in_features, 2)
-        ckpt = os.path.join("checkpoints", "efficientnet_b0", "efficientnet_b0_best.pth")
-
-    else:
-        raise ValueError(f"Unsupported model: {model_name}")
-
-    if not os.path.exists(ckpt):
-        st.error(f"❌ Checkpoint not found at {ckpt}. Please ensure correct folder structure.")
+    ckpt_path = os.path.join("checkpoints", "moe_finetuned.pth")
+    if not os.path.exists(ckpt_path):
+        st.error(f"❌ Checkpoint not found at {ckpt_path}. Please upload it to the 'checkpoints/' directory.")
         st.stop()
 
-    # Load weights safely (strict=False for MobileNet)
-    state_dict = torch.load(ckpt, map_location=device)
-    if model_name == "mobilenet_v3_large":
-        missing, unexpected = model.load_state_dict(state_dict, strict=False)
-        st.warning(f"⚠️ Loaded MobileNetV3 checkpoint with relaxed matching. "
-                   f"Missing keys: {missing}, Unexpected keys: {unexpected}")
-    else:
-        model.load_state_dict(state_dict)
-
+    state = torch.load(ckpt_path, map_location=device)
+    model.load_state_dict(state)
     model.to(device).eval()
+
     gradcam = GradCAM(model, use_cuda=(device.type == "cuda"))
     return model, gradcam, device
+
 
 # -------------------------------
 # Utility Functions
@@ -86,7 +63,8 @@ def preprocess_frame(frame_bgr, size=224):
     ])
     return transform(img).unsqueeze(0)
 
-def extract_frames(video_path, every_n=5, max_frames=200):
+
+def extract_frames(video_path, every_n=5, max_frames=150):
     cap = cv2.VideoCapture(video_path)
     frames = []
     idx = 0
@@ -104,15 +82,10 @@ def extract_frames(video_path, every_n=5, max_frames=200):
     cap.release()
     return frames
 
-# -------------------------------
-# Streamlit UI
-# -------------------------------
-model_choice = st.selectbox(
-    "Select the model for analysis:",
-    ("ResNet50", "DenseNet121", "EfficientNet_B0", "MobileNet_V3_Large")
-)
-st.markdown(f"**Selected Model:** {model_choice}")
 
+# -------------------------------
+# File Upload Section
+# -------------------------------
 uploaded_file = st.file_uploader("📂 Upload a video file (mp4/avi)", type=["mp4", "avi"])
 
 if uploaded_file:
@@ -127,26 +100,27 @@ if uploaded_file:
     st.success("✅ Video uploaded successfully!")
 
     # -------------------------------
-    # Model Loading (cached)
+    # Load Hybrid Model
     # -------------------------------
-    with st.spinner(f"Loading {model_choice} model..."):
-        model, gradcam, device = load_model(model_choice)
+    with st.spinner("Loading Hybrid MoE Model..."):
+        model, gradcam, device = load_hybrid_model()
 
     # -------------------------------
-    # Deepfake Analysis
+    # Frame Analysis
     # -------------------------------
     with st.spinner("Analyzing video frames... Please wait ⏳"):
         frames = extract_frames(input_path, every_n=6, max_frames=80)
-        st.write(f"Extracted {len(frames)} frames for analysis.")
+        st.write(f"Extracted **{len(frames)}** frames for analysis.")
 
-        results_dir = os.path.join("results", os.path.splitext(uploaded_file.name)[0] + f"_{model_choice.lower()}")
+        results_dir = os.path.join("results", os.path.splitext(uploaded_file.name)[0] + "_hybrid")
         os.makedirs(results_dir, exist_ok=True)
         per_frame_scores = []
 
         for i, (frame_idx, frame) in enumerate(frames):
             inp = preprocess_frame(frame).to(device)
             with torch.no_grad():
-                logits = model(inp)
+                output = model(inp)
+                logits = output["logits"] if isinstance(output, dict) else output
                 probs = F.softmax(logits, dim=1).cpu().numpy()[0]
                 prob_fake = float(probs[1])  # index 1 = "fake"
 
@@ -171,7 +145,7 @@ if uploaded_file:
     result_images = sorted([os.path.join(results_dir, f)
                             for f in os.listdir(results_dir) if f.endswith(".jpg")])[:6]
     if result_images:
-        st.subheader("🧠 Top Frames with Grad-CAM Visualization")
+        st.subheader("🧠 Grad-CAM Visual Explanations")
         st.image(result_images, width=300, caption=[os.path.basename(i) for i in result_images])
 
     st.info("✅ Analysis complete. Grad-CAM visualizations saved in the 'results/' folder.")
