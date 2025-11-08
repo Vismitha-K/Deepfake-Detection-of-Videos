@@ -81,7 +81,7 @@ The hybrid model showed consistent superiority (p < 0.05), indicating meaningful
 ### 🚀 Usage
 ```bash
 # Clone repository
-git clone https://github.com/Vismitha-K/deepfake-detection-videos.git
+git clone https://github.com/Vismitha-K/Deepfake-Detection-of-Videos.git
 cd deepfake-detection-videos
 
 # Create and activate virtual environment
@@ -103,6 +103,3 @@ Upload a `.mp4` video and view **REAL/FAKE prediction** with **Grad-CAM overlays
 * Celeb-DF (v2) dataset
 * Arman176001/deepfake-detection (baseline reference)
 * TorchVision & Streamlit libraries
-
-
-
